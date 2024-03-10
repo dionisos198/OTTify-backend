@@ -12,7 +12,8 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addMapping("/**") // cors를 적용할 spring서버의 url 패턴.
             .allowedOrigins("http://ottify.kro.kr:3000", "http://ottify.kro.kr",
                 "http://localhost:3000",
-                "http://52.79.200.90:3000") // cors를 허용할 도메인. 제한을 모두 해제하려면 "**"
+                "http://52.79.200.90:3000",
+                "http://15.164.158.212:3000") // cors를 허용할 도메인. 제한을 모두 해제하려면 "**"
             .allowedMethods("GET", "POST", "PUT", "PATCH",
                 "DELETE", "OPTIONS") // cors를 허용할 method + DELETE 추가
             .allowedHeaders("Content-Type", "Authorization")
