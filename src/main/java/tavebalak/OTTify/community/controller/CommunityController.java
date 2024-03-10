@@ -95,11 +95,8 @@ public class CommunityController {
     public BaseResponse<String> likeComment(
         @RequestParam("subjectId") Long subjectId,
         @RequestParam("commentId") Long commentId) {
-        boolean hasLiked = communityService.likeComment(subjectId, commentId);
-        if (hasLiked) {
-            return BaseResponse.success("성공적으로 토론 댓글 공감 적용이 되었습니다.");
-        }
-        return BaseResponse.success("성공적으로 토론 댓글 공감 해제가 적용되었습니다.");
+        communityService.likeComment(subjectId, commentId);
+        return BaseResponse.success("성공적으로 토론 댓글 공감 적용이 되었습니다.");
     }
 
     @ApiOperation(value = "토론 주제 조회", notes = "전체 프로그램에 대해 작성된 토론글을 조회합니다.")

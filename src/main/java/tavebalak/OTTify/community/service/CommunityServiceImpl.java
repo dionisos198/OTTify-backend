@@ -6,7 +6,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +20,6 @@ import tavebalak.OTTify.community.dto.request.CommunitySubjectCreateDTO;
 import tavebalak.OTTify.community.dto.request.CommunitySubjectEditDTO;
 import tavebalak.OTTify.community.dto.response.CommentListsDTO;
 import tavebalak.OTTify.community.dto.response.CommunityAriclesDTO;
-import tavebalak.OTTify.community.dto.response.CommunitySubjectDTO;
 import tavebalak.OTTify.community.dto.response.CommunitySubjectEditorDTO;
 import tavebalak.OTTify.community.dto.response.CommunitySubjectImageEditorDTO;
 import tavebalak.OTTify.community.dto.response.CommunitySubjectsDTO;
@@ -82,7 +80,7 @@ public class CommunityServiceImpl implements CommunityService {
 
     }
 
-    public Community save(CommunitySubjectCreateDTO c) {
+    public Community saveSubjectForTest(CommunitySubjectCreateDTO c) {
         Program program = isPresent(c);
 
         Community community = Community.builder()
@@ -116,21 +114,31 @@ public class CommunityServiceImpl implements CommunityService {
         String imgPath = c.getImageUrl();
 
         if (!"".equals(imgPath) && imgPath != null) {
-            if (awss3Service.isExist(imgPath)) {
-                communityImgUrl = imgPath;
-            }
+            communityImgUrl = changeNewImageUrl(imgPath, communityImgUrl);
         } else {
-            if (image != null && !image.isEmpty()) {
-                deleteCommunityS3Image(community);
-                communityImgUrl = awss3Service.upload(image, AWS_S3_DISCUSSION_DIR_NAME);
-            } else {
-                deleteCommunityS3Image(community);
-            }
+            communityImgUrl = changeImageUrl(image, community, communityImgUrl);
         }
 
         CommunitySubjectImageEditorDTO communitySubjectImageEditorDTO = communitySubjectEditorDTOBuilder.changeTitleContentImage(
             c.getSubjectName(), c.getContent(), communityImgUrl);
         community.editImage(communitySubjectImageEditorDTO);
+    }
+
+    private String changeNewImageUrl(String imgPath, String communityImgUrl) {
+        if (awss3Service.isExist(imgPath)) {
+            communityImgUrl = imgPath;
+        }
+        return communityImgUrl;
+    }
+
+    private String changeImageUrl(MultipartFile image, Community community,
+        String communityImgUrl) {
+        if (image != null && !image.isEmpty()) {
+            deleteCommunityS3Image(community);
+            return awss3Service.upload(image, AWS_S3_DISCUSSION_DIR_NAME);
+        }
+        deleteCommunityS3Image(community);
+        return communityImgUrl;
     }
 
     public void deleteCommunityS3Image(Community community) {
@@ -139,7 +147,7 @@ public class CommunityServiceImpl implements CommunityService {
         }
     }
 
-    public Community modify(CommunitySubjectEditDTO c, User user) {
+    public Community modifySubjectForTest(CommunitySubjectEditDTO c, User user) {
         Community community = communityRepository.findById(c.getSubjectId())
             .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_NOT_FOUND));
 
@@ -174,7 +182,7 @@ public class CommunityServiceImpl implements CommunityService {
         }
     }
 
-    public void delete(Long subjectId, User user) {
+    public void deleteSubjectForTest(Long subjectId, User user) {
         Community community = communityRepository.findById(subjectId)
             .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_NOT_FOUND));
         if (!Objects.equals(community.getUser().getId(), user.getId())) {
@@ -187,23 +195,27 @@ public class CommunityServiceImpl implements CommunityService {
     public CommunitySubjectsListDTO findAllSubjects(Pageable pageable) {
         Slice<Community> communities = communityRepository.findCommunitiesBy(pageable);
         List<CommunitySubjectsDTO> listDTO = communities.stream().map(
-            community -> CommunitySubjectsDTO
-                .builder()
-                .createdAt(community.getCreatedAt())
-                .updatedAt(community.getUpdatedAt())
-                .title(community.getTitle())
-                .nickName(community.getUser().getNickName())
-                .programId(community.getProgram().getId())
-                .subjectId(community.getId())
-                .likeCount(community.getLikeCount())
-                .imageUrl(community.getImageUrl())
-                .programName(community.getProgram().getTitle())
-                .content(community.getContent())
-                .commentCount(community.getCommentCount())
-                .build()
+            CommunityServiceImpl::buildCommunitySubjectsDTO
         ).collect(Collectors.toList());
         return CommunitySubjectsListDTO.builder().subjectAmount(communities.getNumberOfElements())
             .list(listDTO).hasNext(communities.hasNext()).build();
+    }
+
+    private static CommunitySubjectsDTO buildCommunitySubjectsDTO(Community community) {
+        return CommunitySubjectsDTO
+            .builder()
+            .createdAt(community.getCreatedAt())
+            .updatedAt(community.getUpdatedAt())
+            .title(community.getTitle())
+            .nickName(community.getUser().getNickName())
+            .programId(community.getProgram().getId())
+            .subjectId(community.getId())
+            .likeCount(community.getLikeCount())
+            .imageUrl(community.getImageUrl())
+            .programName(community.getProgram().getTitle())
+            .content(community.getContent())
+            .commentCount(community.getCommentCount())
+            .build();
     }
 
     @Override
@@ -211,24 +223,29 @@ public class CommunityServiceImpl implements CommunityService {
         Slice<Community> communities = communityRepository.findCommunitiesByProgramId(pageable,
             programId);
         List<CommunitySubjectsDTO> list = communities.stream().map(
-            community -> CommunitySubjectsDTO
-                .builder()
-                .createdAt(community.getCreatedAt())
-                .updatedAt(community.getUpdatedAt())
-                .title(community.getTitle())
-                .nickName(community.getUser().getNickName())
-                .subjectId(community.getId())
-                .likeCount(community.getLikeCount())
-                .programId(programId)
-                .imageUrl(community.getImageUrl())
-                .programName(community.getProgram().getTitle())
-                .content(community.getContent())
-                .commentCount(community.getCommentCount())
-                .build()
+            community -> buildCommunitySubjectsDTOForProgram(programId, community)
         ).collect(Collectors.toList());
 
         return CommunitySubjectsListDTO.builder().subjectAmount(communities.getNumberOfElements())
             .list(list).hasNext(communities.hasNext()).build();
+    }
+
+    private static CommunitySubjectsDTO buildCommunitySubjectsDTOForProgram(Long programId,
+        Community community) {
+        return CommunitySubjectsDTO
+            .builder()
+            .createdAt(community.getCreatedAt())
+            .updatedAt(community.getUpdatedAt())
+            .title(community.getTitle())
+            .nickName(community.getUser().getNickName())
+            .subjectId(community.getId())
+            .likeCount(community.getLikeCount())
+            .programId(programId)
+            .imageUrl(community.getImageUrl())
+            .programName(community.getProgram().getTitle())
+            .content(community.getContent())
+            .commentCount(community.getCommentCount())
+            .build();
     }
 
     @Override
@@ -240,50 +257,62 @@ public class CommunityServiceImpl implements CommunityService {
 
         likedCommunityRepository.findByCommunityIdAndUserId(findCommunity.getId(),
             savedUser.getId()).ifPresentOrElse(
-            (entity) -> {
-                likedCommunityRepository.delete(entity);
-                findCommunity.decreaseLikeCount();
-            },
-            () -> {
-                likedCommunityRepository.save(
-                    LikedCommunity.builder()
-                        .user(savedUser)
-                        .community(findCommunity)
-                        .build()
-                );
-
-                findCommunity.increaseLikeCount();
-            }
+            entity -> cancelLikeCommunity(entity, findCommunity),
+            () -> postLikeCommunity(savedUser, findCommunity)
         );
     }
 
+    private void postLikeCommunity(User savedUser,
+        Community findCommunity) {
+        saveLikeCommunity(savedUser, findCommunity);
+        increaseLikeCountForCommunity(findCommunity);
+    }
+
+    private void saveLikeCommunity(User savedUser, Community findCommunity) {
+        likedCommunityRepository.save(
+            builderLikeCommunity(savedUser, findCommunity)
+        );
+    }
+
+    private void increaseLikeCountForCommunity(Community findCommunity) {
+        findCommunity.increaseLikeCount();
+    }
+
+    private static LikedCommunity builderLikeCommunity(User savedUser, Community findCommunity) {
+        return LikedCommunity.builder()
+            .user(savedUser)
+            .community(findCommunity)
+            .build();
+    }
+
+    private void cancelLikeCommunity(
+        LikedCommunity entity, Community findCommunity) {
+        deleteLikeCommunity(entity);
+        decreaseLikeCountForCommunity(findCommunity);
+    }
+
+    private static void decreaseLikeCountForCommunity(Community findCommunity) {
+        findCommunity.decreaseLikeCount();
+    }
+
+    private void deleteLikeCommunity(LikedCommunity entity) {
+        likedCommunityRepository.delete(entity);
+    }
+
     @DistributeLock(key = "T(java.lang.String).format('LikeSub%d', #id)")
-    public void likeSub(User user, Community community, Long id) {
+    public void likeSubjectForTest(User user, Community community, Long id) {
         Community findCommunity = communityRepository.findById(id).orElseThrow(() ->
             new NotFoundException(ErrorCode.COMMUNITY_NOT_FOUND));
         likedCommunityRepository.findByCommunityIdAndUserId(community.getId(),
             user.getId()).ifPresentOrElse(
-            (entity) -> {
-                likedCommunityRepository.delete(entity);
-                findCommunity.decreaseLikeCount();
-            },
-            () -> {
-                likedCommunityRepository.save(
-                    LikedCommunity.builder()
-                        .user(user)
-                        .community(community)
-                        .build()
-                );
-                findCommunity.increaseLikeCount();
-            }
+            entity -> cancelLikeCommunity(entity, findCommunity),
+            () -> postLikeCommunity(user, community)
         );
     }
 
 
     @Override
-    public boolean likeComment(Long subjectId, Long commentId) {
-        //only-write object
-        AtomicBoolean flag = new AtomicBoolean(false);
+    public void likeComment(Long subjectId, Long commentId) {
         User savedUser = getUser();
         Community community = communityRepository.findById(subjectId)
             .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_NOT_FOUND));
@@ -291,27 +320,47 @@ public class CommunityServiceImpl implements CommunityService {
             .orElseThrow(() -> new NotFoundException(ErrorCode.REPLY_NOT_FOUND));
 
         likedReplyRepository.findByUserIdAndReplyIdAndCommunityId(savedUser.getId(),
-            findReply.getId(), community.getId()).ifPresentOrElse(
-            likedReplyRepository::delete,
-            () -> {
-                likedReplyRepository.save(
-                    LikedReply.builder()
-                        .user(savedUser)
-                        .community(community)
-                        .reply(findReply)
-                        .build()
-                );
-                flag.set(true);
-            }
-        );
+                findReply.getId(), community.getId())
+            .ifPresentOrElse(entity -> cancelLikeReply(entity, findReply),
+                () -> postLikeReply(savedUser, community, findReply)
+            );
 
-        if (flag.get()) {
-            findReply.increaseLikeCount();
-        } else {
-            findReply.decreaseLikeCount();
-        }
+    }
 
-        return flag.get();
+    private void postLikeReply(User savedUser, Community community,
+        Reply findReply) {
+        saveLikeReply(savedUser, community, findReply);
+        increaseLikeCountForReply(findReply);
+    }
+
+    private static void increaseLikeCountForReply(Reply findReply) {
+        findReply.increaseLikeCount();
+    }
+
+    private void saveLikeReply(User savedUser, Community community, Reply findReply) {
+        likedReplyRepository.save(builderLikedReply(savedUser, community, findReply));
+    }
+
+    private void cancelLikeReply(LikedReply entity, Reply findReply) {
+        deleteLikeReply(entity);
+        decreaseLikeCountForReply(findReply);
+    }
+
+    private static void decreaseLikeCountForReply(Reply findReply) {
+        findReply.decreaseLikeCount();
+    }
+
+    private void deleteLikeReply(LikedReply entity) {
+        likedReplyRepository.delete(entity);
+    }
+
+    private static LikedReply builderLikedReply(User savedUser, Community community,
+        Reply findReply) {
+        return LikedReply.builder()
+            .user(savedUser)
+            .community(community)
+            .reply(findReply)
+            .build();
     }
 
     @Override
@@ -320,40 +369,10 @@ public class CommunityServiceImpl implements CommunityService {
             () -> new NotFoundException(ErrorCode.COMMUNITY_NOT_FOUND)
         );
 
-        List<Reply> parentList = community.getReplyList().stream()
-            .filter(reply -> reply.getParent() == null)
-            .sorted(Comparator.comparing(Reply::getCreatedAt))
-            .collect(Collectors.toList());
-
+        List<Reply> parentList = getParentCommentList(community);
         List<CommentListsDTO> commentListsDTOList = new ArrayList<>();
         for (Reply parent : parentList) {
-            List<Reply> childList = community.getReplyList().stream()
-                .filter(reply -> reply.getParent() == parent)
-                .sorted(Comparator.comparing(Reply::getCreatedAt))
-                .collect(Collectors.toList());
-
-            List<ReplyListsDTO> collect = childList.stream().map(listone ->
-                ReplyListsDTO.builder()
-                    .recommentId(listone.getId())
-                    .content(listone.getContent())
-                    .nickName(listone.getUser().getNickName())
-                    .userId(listone.getUser().getId())
-                    .createdAt(listone.getCreatedAt())
-                    .likeCount(listone.getLikeCount())
-                    .build()
-            ).collect(Collectors.toList());
-
-            CommentListsDTO build = CommentListsDTO.builder()
-                .content(parent.getContent())
-                .nickName(parent.getUser().getNickName())
-                .profileUrl(parent.getUser().getProfilePhoto())
-                .createdAt(parent.getCreatedAt())
-                .userId(parent.getUser().getId())
-                .replyListsDTOList(collect)
-                .likeCount(parent.getLikeCount())
-                .commentId(parent.getId())
-                .build();
-            commentListsDTOList.add(build);
+            commentListsDTOListAddItem(parent, community, commentListsDTOList);
         }
 
         return CommunityAriclesDTO.builder()
@@ -372,26 +391,50 @@ public class CommunityServiceImpl implements CommunityService {
             .build();
     }
 
-    @Override
-    public CommunitySubjectDTO getSubject(Long subjectId) {
-        Community community = communityRepository.findById(subjectId)
-            .orElseThrow(() -> new NotFoundException(ErrorCode.COMMUNITY_NOT_FOUND));
+    private List<Reply> getParentCommentList(Community community) {
+        return community.getReplyList().stream()
+            .filter(reply -> reply.getParent() == null)
+            .sorted(Comparator.comparing(Reply::getCreatedAt))
+            .collect(Collectors.toList());
+    }
 
-        return CommunitySubjectDTO.builder()
-            .subjectId(subjectId)
-            .title(community.getTitle())
-            .content(community.getContent())
-            .programId(community.getProgram().getId())
-            .programTitle(community.getProgram().getTitle())
-            .posterPath(community.getProgram().getPosterPath())
+    private static void commentListsDTOListAddItem(Reply parent, Community community,
+        List<CommentListsDTO> commentListsDTOList) {
+        List<Reply> childList = community.getReplyList().stream()
+            .filter(reply -> reply.getParent() == parent)
+            .sorted(Comparator.comparing(Reply::getCreatedAt))
+            .collect(Collectors.toList());
+
+        List<ReplyListsDTO> collect = childList.stream()
+            .map(CommunityServiceImpl::builderReplyListsDTO).collect(Collectors.toList());
+
+        CommentListsDTO build = CommentListsDTO.builder()
+            .content(parent.getContent())
+            .nickName(parent.getUser().getNickName())
+            .profileUrl(parent.getUser().getProfilePhoto())
+            .createdAt(parent.getCreatedAt())
+            .userId(parent.getUser().getId())
+            .replyListsDTOList(collect)
+            .likeCount(parent.getLikeCount())
+            .commentId(parent.getId())
+            .build();
+        commentListsDTOList.add(build);
+    }
+
+    private static ReplyListsDTO builderReplyListsDTO(Reply listone) {
+        return ReplyListsDTO.builder()
+            .recommentId(listone.getId())
+            .content(listone.getContent())
+            .nickName(listone.getUser().getNickName())
+            .userId(listone.getUser().getId())
+            .createdAt(listone.getCreatedAt())
+            .likeCount(listone.getLikeCount())
             .build();
     }
 
     public User getUser() {
-        return userRepository.findByEmail(
-                SecurityUtil.getCurrentEmail().get())
-            .orElseThrow(() -> new UnauthorizedException(ErrorCode.UNAUTHORIZED)
-            );
+        return userRepository.findByEmail(SecurityUtil.getCurrentEmail().get())
+            .orElseThrow(() -> new UnauthorizedException(ErrorCode.UNAUTHORIZED));
     }
 
 }

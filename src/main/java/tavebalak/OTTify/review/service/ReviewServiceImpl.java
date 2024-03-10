@@ -2,9 +2,7 @@ package tavebalak.OTTify.review.service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -32,8 +30,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final int TOP8_SIZE = 8;
 
     public List<LatestReviewsDTO> getLatestReviews() {
-        List<Review> reviewList = reviewRepository.findAll(
-            Sort.by(Sort.Direction.DESC, "createdAt"));
+        List<Review> reviewList = findReviewList();
         List<Review> top8ReviewList = new ArrayList<>();
         if (reviewList.size() < TOP8_SIZE) {
             top8ReviewList.addAll(reviewList);
@@ -41,17 +38,26 @@ public class ReviewServiceImpl implements ReviewService {
             top8ReviewList.addAll(reviewList.subList(0, TOP8_SIZE));
         }
         return top8ReviewList.stream().map(
-            listOne -> LatestReviewsDTO.builder()
-                .reviewId(listOne.getId())
-                .nickName(listOne.getUser().getNickName())
-                .content(listOne.getContent())
-                .programTitle(listOne.getProgram().getTitle())
-                .reviewRating(listOne.getRating())
-                .profilePhoto(listOne.getUser().getProfilePhoto())
-                .likeCount(getLikeSum(listOne.getId()))
-                .build()
+            listOne -> builderLatestReviewsDTO(listOne, getLikeSum(listOne.getId()))
         ).collect(Collectors.toList());
 
+    }
+
+    private List<Review> findReviewList() {
+        return reviewRepository.findAll(
+            Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    private LatestReviewsDTO builderLatestReviewsDTO(Review listOne, Integer listOne1) {
+        return LatestReviewsDTO.builder()
+            .reviewId(listOne.getId())
+            .nickName(listOne.getUser().getNickName())
+            .content(listOne.getContent())
+            .programTitle(listOne.getProgram().getTitle())
+            .reviewRating(listOne.getRating())
+            .profilePhoto(listOne.getUser().getProfilePhoto())
+            .likeCount(listOne1)
+            .build();
     }
 
     private Integer getLikeSum(Long reviewId) {
@@ -62,8 +68,7 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     public List<LatestReviewsDTO> getLatestReviewsTest() {
-        List<Review> reviewList = reviewRepository.findAll(
-            Sort.by(Sort.Direction.DESC, "createdAt"));
+        List<Review> reviewList = findReviewList();
         List<Review> top8ReviewList = new ArrayList<>();
         if (reviewList.size() < TOP8_SIZE) {
             top8ReviewList.addAll(reviewList);
@@ -71,53 +76,69 @@ public class ReviewServiceImpl implements ReviewService {
             top8ReviewList.addAll(reviewList.subList(0, TOP8_SIZE));
         }
         return top8ReviewList.stream().map(
-            listOne -> LatestReviewsDTO.builder()
-                .reviewId(listOne.getId())
-                .nickName(listOne.getUser().getNickName())
-                .content(listOne.getContent())
-                .programTitle(listOne.getProgram().getTitle())
-                .reviewRating(listOne.getRating())
-                .profilePhoto(listOne.getUser().getProfilePhoto())
-                .likeCount(0)
-                .build()
+            listOne -> builderLatestReviewsDTO(listOne, 0)
         ).collect(Collectors.toList());
 
     }
 
 
-    public void save(Review review) {
+    public void saveReview(Review review) {
         reviewRepository.save(review);
     }
 
     @Override
-    public boolean likeReview(Long id) {
-        AtomicBoolean flag = new AtomicBoolean(false);
+    public void likeReview(Long id) {
         String userEmail = SecurityUtil.getCurrentEmail().get();
         User savedUser = userRepository.findByEmail(userEmail)
             .orElseThrow(() -> new NotFoundException(ErrorCode.USER_NOT_FOUND));
-        Review review = reviewRepository.findById(id).orElseThrow(() -> new NotFoundException(
-            ErrorCode.REVIEW_NOT_FOUND));
+
+        Review review = findReviewById(id);
+
         likedReviewRepository.findByUserIdAndReviewId(savedUser.getId(), review.getId())
             .ifPresentOrElse(
-                likedReviewRepository::delete,
-                () -> {
-                    likedReviewRepository.save(
-                        LikedReview.builder()
-                            .user(savedUser)
-                            .review(reviewRepository.findById(id)
-                                .orElseThrow(NoSuchElementException::new))
-                            .build()
-                    );
-                    flag.set(true);
-                }
+                entity -> cancelLikeReview(entity, review),
+                () -> postLikeReview(id, savedUser, review)
             );
+    }
 
-        if (flag.get()) {
-            review.addLikeNumber();
-        } else {
-            review.cancelLikeNumber();
-        }
+    private void postLikeReview(Long id, User savedUser,
+        Review review) {
+        saveLikeReview(id, savedUser);
+        increaseLikeCountForReview(review);
+    }
 
-        return flag.get();
+    private static void increaseLikeCountForReview(Review review) {
+        review.addLikeNumber();
+    }
+
+    private void saveLikeReview(Long id, User savedUser) {
+        likedReviewRepository.save(
+            builderLikedReview(id, savedUser)
+        );
+    }
+
+    private void cancelLikeReview(LikedReview entity, Review review) {
+        deleteLikeReview(entity);
+        decreaseLikeCountForReview(review);
+    }
+
+    private static void decreaseLikeCountForReview(Review review) {
+        review.cancelLikeNumber();
+    }
+
+    private void deleteLikeReview(LikedReview entity) {
+        likedReviewRepository.delete(entity);
+    }
+
+    private LikedReview builderLikedReview(Long id, User savedUser) {
+        return LikedReview.builder()
+            .user(savedUser)
+            .review(findReviewById(id))
+            .build();
+    }
+
+    private Review findReviewById(Long id) {
+        return reviewRepository.findById(id)
+            .orElseThrow(() -> new NotFoundException(ErrorCode.REVIEW_NOT_FOUND));
     }
 }

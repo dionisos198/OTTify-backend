@@ -35,12 +35,8 @@ public class ReviewMainController {
     @ApiImplicitParam(name = "id", value = "리뷰 ID 값", required = true, paramType = "query")
     @PostMapping("/latestReviews/like")
     public BaseResponse<String> likeReview(@RequestParam("id") Long id) {
-        boolean hasSaved = reviewService.likeReview(id);
-        if (hasSaved) {
-            return BaseResponse.success("id = " + id + "인 아이디 값을 가진 리뷰에 공감이 적용되었습니다.");
-        } else {
-            return BaseResponse.success("id = " + id + "인 아이디 값을 가진 리뷰에 공감이 해제되었습니다.");
-        }
+        reviewService.likeReview(id);
+        return BaseResponse.success("id = " + id + "인 아이디 값을 가진 리뷰에 공감이 적용되었습니다.");
     }
 
 }

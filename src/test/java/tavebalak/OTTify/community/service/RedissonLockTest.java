@@ -31,7 +31,6 @@ public class RedissonLockTest {
     @Autowired
     private UserRepository userRepository;
     private static final int THREAD_COUNT = 2;
-    private static final long ID_NUMBER = 1L;
 
     @Test
     @DisplayName("likeCount에서 Redisson 적용후 동시성 문제 있는 경우")
@@ -49,7 +48,7 @@ public class RedissonLockTest {
 
         executorService.submit(() -> {
             try {
-                communityService.likeSub(user1, community, 12L);
+                communityService.likeSubjectForTest(user1, community, 12L);
             } finally {
                 latch.countDown();
             }
@@ -57,7 +56,7 @@ public class RedissonLockTest {
 
         executorService.submit(() -> {
             try {
-                communityService.likeSub(user2, community, 12L);
+                communityService.likeSubjectForTest(user2, community, 12L);
             } finally {
                 latch.countDown();
             }

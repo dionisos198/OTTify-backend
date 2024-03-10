@@ -1,12 +1,14 @@
 package tavebalak.OTTify.review.service;
 
+import java.util.List;
 import tavebalak.OTTify.review.dto.response.LatestReviewsDTO;
 import tavebalak.OTTify.review.entity.Review;
 
-import java.util.List;
-
 public interface ReviewService {
+
     List<LatestReviewsDTO> getLatestReviews();
-    void save(Review review);
-    boolean likeReview(Long id);
+
+    void saveReview(Review review);
+
+    void likeReview(Long id);
 }

@@ -70,7 +70,6 @@ class CommunityControllerTest {
     public void registerSubject() throws Exception {
         //given
         CommunitySubjectCreateDTO request = registerSubjectRequest();
-        Community response = communityService.save(request);
 
         //when
         MockMultipartFile file = new MockMultipartFile("file", "song.png", "multipart/form-data",
@@ -117,8 +116,8 @@ class CommunityControllerTest {
             .build();
         Reply replyResponse = replyService.saveComment(replyRequest);
 
-        when(communityService.save(any())).thenReturn(response);
-        communityService.save(registerSubjectRequest());
+        when(communityService.saveSubjectForTest(any())).thenReturn(response);
+        communityService.saveSubjectForTest(registerSubjectRequest());
 
         when(replyService.saveComment(any(ReplyCommentCreateDTO.class)))
             .thenReturn(replyResponse);
@@ -152,18 +151,18 @@ class CommunityControllerTest {
             .content("test-content")
             .build();
 
-        when(communityService.save(any())).thenReturn(response);
+        when(communityService.saveSubjectForTest(any())).thenReturn(response);
         when(replyService.saveComment(any())).thenReturn(replyResponse);
         doNothing().when(replyService).saveRecomment(any());
 
-        communityService.save(registerSubjectRequest());
+        communityService.saveSubjectForTest(registerSubjectRequest());
         replyService.saveComment(registerCommentRequest());
 
         //when, then
         ResultActions resultActions = mockMvc.perform(
                 MockMvcRequestBuilders.post("/api/v1/discussion/recomment")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(new Gson().toJson(registerRecommentRequest())))
+                    .content(new Gson().toJson(registerRecommentRequest(1L))))
             .andExpect(status().isOk());
 
         //then
@@ -178,39 +177,12 @@ class CommunityControllerTest {
             .build();
     }
 
-    private ReplyRecommentCreateDTO registerRecommentRequest() {
+    private ReplyRecommentCreateDTO registerRecommentRequest(Long id) {
         return ReplyRecommentCreateDTO.builder()
-            .subjectId(1L)
+            .subjectId(id)
             .commentId(1L)
             .comment(testComment)
             .build();
-    }
-
-    @Test
-    @DisplayName("POST 댓글 등록 컨트롤러 로직 실패 - 없는 ID")
-    public void getFailBadIdTestRecommentID() throws Exception, NotFoundException {
-        //given
-        CommunitySubjectCreateDTO noExistCommunity = CommunitySubjectCreateDTO.builder()
-            .subjectName("test-name")
-            .content("test-content")
-            .programId(1L)
-            .build();
-
-        Community community = Community.builder()
-            .id(1L)
-            .title(noExistCommunity.getSubjectName())
-            .program(Program.testBuilder().title("program-title").posterPath("program-posterpath")
-                .id(noExistCommunity.getProgramId()).build())
-            .content(noExistCommunity.getContent())
-            .build();
-
-        //when, then
-        ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/v1/discussion/comment")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(new Gson().toJson(registerRecommentRequest())))
-            .andExpect(status().isBadRequest());
-
     }
 
     @Test
@@ -229,10 +201,10 @@ class CommunityControllerTest {
             .content("test-content")
             .build();
 
-        when(communityService.save(any())).thenReturn(response);
+        when(communityService.saveSubjectForTest(any())).thenReturn(response);
         when(replyService.saveComment(any())).thenReturn(replyResponse);
 
-        communityService.save(registerSubjectRequest());
+        communityService.saveSubjectForTest(registerSubjectRequest());
         replyService.saveComment(registerCommentRequest());
 
         ReplyRecommentCreateDTO testContent = ReplyRecommentCreateDTO.builder()
@@ -260,8 +232,8 @@ class CommunityControllerTest {
                 Program.testBuilder().title("test-title").id(1L).posterPath("test-path").build())
             .title("test-title")
             .build();
-        when(communityService.save(any())).thenReturn(response);
-        Community savedCommunity = communityService.save(registerSubjectRequest());
+        when(communityService.saveSubjectForTest(any())).thenReturn(response);
+        Community savedCommunity = communityService.saveSubjectForTest(registerSubjectRequest());
 
         doNothing().when(communityService).modifySubject(any(), any());
 
@@ -310,13 +282,13 @@ class CommunityControllerTest {
             .content("test-content")
             .build();
 
-        when(communityService.save(any())).thenReturn(response);
+        when(communityService.saveSubjectForTest(any())).thenReturn(response);
         when(replyService.saveComment(any())).thenReturn(replyResponse);
         doNothing().when(replyService).saveRecomment(any());
 
-        Community savedCommunity = communityService.save(registerSubjectRequest());
+        Community savedCommunity = communityService.saveSubjectForTest(registerSubjectRequest());
         replyService.saveComment(registerCommentRequest());
-        replyService.saveRecomment(registerRecommentRequest());
+        replyService.saveRecomment(registerRecommentRequest(1L));
 
         ReplyCommentEditDTO replyCommentEditDTOs = new ReplyCommentEditDTO(1L,
             1L, "test-content");

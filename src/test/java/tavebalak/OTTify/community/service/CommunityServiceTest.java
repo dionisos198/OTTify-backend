@@ -62,7 +62,7 @@ public class CommunityServiceTest {
             toEntity(requestDto, user, program));
 
         //when
-        communityService.save(requestDto);
+        communityService.saveSubjectForTest(requestDto);
 
         //then
         //id 생성 전략을 identity를 사용, 실제 DB에 저장되어야만 ID가 저장된다. 따라서 테스트에서 ID를 검증 불가
@@ -99,12 +99,13 @@ public class CommunityServiceTest {
         when(programRepository.findById(anyLong())).thenReturn(Optional.of(program));
         when(communityRepository.save(any())).thenReturn(
             toEntity(requestDto, user, program));
-        communityService.save(requestDto);
+        communityService.saveSubjectForTest(requestDto);
         when(communityRepository.findById(anyLong())).thenReturn(
             Optional.of(toEntity(requestDto, user, program)));
 
         //when
-        Community findCommunity = communityService.modify(makeCommunitySubjectEditDTO(), user);
+        Community findCommunity = communityService.modifySubjectForTest(
+            makeCommunitySubjectEditDTO(), user);
 
         //then
         assertThat(findCommunity).isNotNull();
@@ -132,13 +133,13 @@ public class CommunityServiceTest {
         when(communityRepository.save(any())).thenReturn(
             toEntity(requestDto, user, program));
         when(programRepository.findById(anyLong())).thenReturn(Optional.of(program));
-        communityService.save(requestDto);
+        communityService.saveSubjectForTest(requestDto);
         when(communityRepository.findById(anyLong())).thenReturn(
             Optional.of(toEntity(requestDto, user, program)));
         doNothing().when(communityRepository).delete(any());
 
         //when
-        communityService.delete(1L, user);
+        communityService.deleteSubjectForTest(1L, user);
 
         //then
         assertEquals(0, communityRepository.count());
@@ -154,14 +155,14 @@ public class CommunityServiceTest {
         when(communityRepository.save(any())).thenReturn(
             toEntity(requestDto, user, program));
         when(programRepository.findById(anyLong())).thenReturn(Optional.of(program));
-        communityService.save(requestDto);
+        communityService.saveSubjectForTest(requestDto);
 
         CommunitySubjectCreateDTO other = CommunitySubjectCreateDTO.builder()
             .programId(10L)
             .subjectName("사랑과 우정의 따뜻한 이야기 '응답하라 1988'")
             .content("'응답하라 1988'은 사랑과 우정의 따뜻한 이야기를 그려냈습니다. 이 드라마가 많은 사랑을 받은 이유에 대해 토론해보세요!")
             .build();
-        communityService.save(other);
+        communityService.saveSubjectForTest(other);
 
         CommunitySubjectsDTO build = CommunitySubjectsDTO.builder()
             .subjectId(1L)
@@ -208,14 +209,14 @@ public class CommunityServiceTest {
         when(communityRepository.save(any())).thenReturn(
             toEntity(requestDto, user, program));
         when(programRepository.findById(anyLong())).thenReturn(Optional.of(program));
-        communityService.save(requestDto);
+        communityService.saveSubjectForTest(requestDto);
 
         CommunitySubjectCreateDTO other = CommunitySubjectCreateDTO.builder()
             .programId(10L)
             .subjectName("사랑과 우정의 따뜻한 이야기 '응답하라 1988'")
             .content("'응답하라 1988'은 사랑과 우정의 따뜻한 이야기를 그려냈습니다. 이 드라마가 많은 사랑을 받은 이유에 대해 토론해보세요!")
             .build();
-        communityService.save(other);
+        communityService.saveSubjectForTest(other);
 
         CommunitySubjectsDTO build = CommunitySubjectsDTO.builder()
             .subjectId(1L)
@@ -250,7 +251,7 @@ public class CommunityServiceTest {
         Program program = Program.testBuilder().id(1L).title("test-program-title").build();
         when(communityRepository.save(any())).thenReturn(toEntity(requestDto, user, program));
         when(programRepository.findById(anyLong())).thenReturn(Optional.of(program));
-        communityService.save(requestDto);
+        communityService.saveSubjectForTest(requestDto);
 
         Community entity = toEntity(requestDto, user, program);
 
@@ -258,7 +259,7 @@ public class CommunityServiceTest {
             Optional.of(toLikedCommunity(entity, user)));
 
         //when
-        communityService.likeSub(user, entity, 1L);
+        communityService.likeSubjectForTest(user, entity, 1L);
 
         //then
         LikedCommunity likedCommunity = likedCommunityRepository.findByCommunityIdAndUserId(1L, 1L)
@@ -285,15 +286,15 @@ public class CommunityServiceTest {
         Program program = Program.testBuilder().id(1L).title("test-program-title").build();
         when(communityRepository.save(any())).thenReturn(toEntity(requestDto, user, program));
         when(programRepository.findById(anyLong())).thenReturn(Optional.of(program));
-        Community entity = communityService.save(requestDto);
+        Community entity = communityService.saveSubjectForTest(requestDto);
 
         when(likedCommunityRepository.findByCommunityIdAndUserId(eq(1L),
             eq(user.getId()))).thenReturn(
             Optional.of(toLikedCommunity(entity, user)));
 
         //when
-        communityService.likeSub(user, entity, 1L);
-        communityService.likeSub(user, entity, 1L);
+        communityService.likeSubjectForTest(user, entity, 1L);
+        communityService.likeSubjectForTest(user, entity, 1L);
 
         //then
         Assertions.assertThat(entity.getLikeCount()).isEqualTo(0);
