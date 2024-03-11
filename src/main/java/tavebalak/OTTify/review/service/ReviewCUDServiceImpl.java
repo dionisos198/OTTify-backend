@@ -5,6 +5,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tavebalak.OTTify.common.lock.DistributeLock;
 import tavebalak.OTTify.error.ErrorCode;
 import tavebalak.OTTify.error.exception.BadRequestException;
 import tavebalak.OTTify.error.exception.NotFoundException;
@@ -159,6 +160,7 @@ public class ReviewCUDServiceImpl implements ReviewCUDService {
     //리뷰 좋아요 기능을 구현합니다.
     @Override
     @Transactional
+    @DistributeLock(key = "T(java.lang.String).format('LikeReview%d', #reviewId)")
     public void likeReview(User user, Long reviewId) {
         //리뷰가 없을 경우 예외
         Review review = reviewRepository.findById(reviewId)
