@@ -13,11 +13,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClient.RequestHeadersUriSpec;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple3;
+import reactor.util.function.Tuple2;
 import tavebalak.OTTify.error.ErrorCode;
 import tavebalak.OTTify.error.exception.NotFoundException;
 import tavebalak.OTTify.genre.entity.Genre;
 import tavebalak.OTTify.genre.repository.GenreRepository;
+import tavebalak.OTTify.genre.repository.ProgramGenreRepository;
 import tavebalak.OTTify.genre.repository.UserGenreRepository;
 import tavebalak.OTTify.program.dto.programDetails.Response.ProgramDetailResponse;
 import tavebalak.OTTify.program.dto.programDetails.Response.ProgramProviderListResponseDto;
@@ -25,9 +26,6 @@ import tavebalak.OTTify.program.dto.programDetails.Response.ProgramProviderRespo
 import tavebalak.OTTify.program.dto.programDetails.Response.ProgramResponseDto;
 import tavebalak.OTTify.program.dto.programDetails.openApiRequest.personDetails.Cast;
 import tavebalak.OTTify.program.dto.programDetails.openApiRequest.personDetails.OAProgramCreditsDto;
-import tavebalak.OTTify.program.dto.programDetails.openApiRequest.programDetailRequest.OAMovieDetailsDto;
-import tavebalak.OTTify.program.dto.programDetails.openApiRequest.programDetailRequest.OAProgramDetailsDto;
-import tavebalak.OTTify.program.dto.programDetails.openApiRequest.programDetailRequest.OATvDetailsDto;
 import tavebalak.OTTify.program.dto.programDetails.openApiRequest.providerDetails.OACountryDetailsDto;
 import tavebalak.OTTify.program.dto.programDetails.openApiRequest.providerDetails.OAProgramProviderDto;
 import tavebalak.OTTify.program.dto.response.UserSpecificRatingResponseDto;
@@ -50,148 +48,86 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
     private final OttRepository ottRepository;
     private final UserGenreRepository userGenreRepository;
     private final ReviewRepository reviewRepository;
+    private final ProgramGenreRepository programGenreRepository;
 
 
     @Override
     public ProgramResponseDto showDetails(Long programId) {
         Program program = programRepository.findById(programId)
-            .orElseThrow(() -> new NotFoundException(ErrorCode.PROGRAM_NOT_FOUND));
-
-        //API 요청 첫번째: 프로그램 상세 정보
-        Mono<?> OAProgramDetailsDtoMono = getProgramDetails(program.getTmDbProgramId(),
-            program.getType()).subscribeOn(Schedulers.boundedElastic());
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PROGRAM_NOT_FOUND));
 
         //API 요청 두번째: 사람 상세 정보
         Mono<OAProgramCreditsDto> oaProgramCreditsDtoMono = getCreditsDtoMono(
-            program.getTmDbProgramId(),
-            program.getType()).subscribeOn(Schedulers.boundedElastic());
+                program.getTmDbProgramId(),
+                program.getType()).subscribeOn(Schedulers.boundedElastic());
 
         //API 요청 세번째: Provider 상세 정보
         Mono<OAProgramProviderDto> oaProgramProviderDtoMono = getProviderDtoMono(
-            program.getTmDbProgramId(),
-            program.getType()).subscribeOn(Schedulers.boundedElastic());
+                program.getTmDbProgramId(),
+                program.getType()).subscribeOn(Schedulers.boundedElastic());
 
         //비동기식으로 api 요청
-        Tuple3<?, OAProgramCreditsDto, OAProgramProviderDto> tuple3 = Mono.zip(
-            OAProgramDetailsDtoMono, oaProgramCreditsDtoMono, oaProgramProviderDtoMono).block();
+        Tuple2<OAProgramCreditsDto, OAProgramProviderDto> movieInfoTuple = Mono.zip(
+                oaProgramCreditsDtoMono,
+                oaProgramProviderDtoMono).block();
 
         //programDetailResponse 생성
-        ProgramDetailResponse programDetailResponse = createProgramDetailResponse(
-            (OAProgramDetailsDto) tuple3.getT1());
+        ProgramDetailResponse programDetailResponse = createProgramDetailResponse(program);
 
         //배우, 감독 한글로 변환 및 감독을 앞으로
-        changeActorAndDirectorToKorea(tuple3.getT2());
+        changeActorAndDirectorToKorea(movieInfoTuple.getT1());
 
         //한국 ott 추출
         Optional<OACountryDetailsDto> kr = Optional.ofNullable(
-            tuple3.getT3().getResults().get("KR"));
+                movieInfoTuple.getT2().getResults().get("KR"));
 
-        //사용자에게 보낼 DTO 를 만들고 OTT 의 이름을 한글로 변환시키는 작업을 수행합니다.
         Optional<ProgramProviderListResponseDto> programProviderListResponseDto = kr.map(
-            oaCountryDetailsDto -> changeOTTtoKoreanAndMakeProviderResponseDto(
-                oaCountryDetailsDto));
+                oaCountryDetailsDto -> changeOTTtoKoreanAndMakeProviderResponseDto(
+                        oaCountryDetailsDto));
 
         // 사용자에게 보내줄 DTO
         ProgramResponseDto programResponseDto = new ProgramResponseDto(programDetailResponse,
-            tuple3.getT2(), programProviderListResponseDto.orElse(null),
-            program.getAverageRating());
+                movieInfoTuple.getT1(), programProviderListResponseDto.orElse(null),
+                program.getAverageRating());
 
         return programResponseDto;
 
     }
 
-    //프로그램 상세 정보를 open api 를 통해서 요청
-    private Mono<?> getProgramDetails(Long tmDbId, ProgramType programType) {
-        if (programType == ProgramType.Movie) {
-            Mono<OAMovieDetailsDto> oaMovieDetailsDtoMono = webClient.get()
-                .uri("/movie/" + tmDbId + "?language=ko")
-                .retrieve()
-                .bodyToMono(OAMovieDetailsDto.class);
-
-            return oaMovieDetailsDtoMono;
-        } else {
-            Mono<OATvDetailsDto> oaTvDetailsDtoMono = webClient.get()
-                .uri("/tv/" + tmDbId + "?language=ko")
-                .retrieve()
-                .bodyToMono(OATvDetailsDto.class);
-
-            return oaTvDetailsDtoMono;
-        }
-    }
 
     //TV와 영화의 API 반환값 차이 제거 위해 새로 DTO 반환값 설계
-    private ProgramDetailResponse createProgramDetailResponse(
-        OAProgramDetailsDto oaProgramDetailsDto) {
+    private ProgramDetailResponse createProgramDetailResponse(Program program) {
+
+        List<String> genreName = programGenreRepository.findByProgram(program.getId())
+                .stream().map(programGenre -> {
+                    Genre genre = genreRepository.findById(programGenre.getGenre().getId())
+                            .orElseThrow(
+                                    () -> new NotFoundException(ErrorCode.PROGRAM_GENRE_NOT_FOUND));
+
+                    return genre.getName();
+                }).collect(Collectors.toList());
 
         //장르 이름 변환
-        List<Long> changeGenreIds = new ArrayList<>();
-        changeGenreIds.add(10759L);
-        changeGenreIds.add(10762L);
-        changeGenreIds.add(10763L);
-        changeGenreIds.add(10764L);
-        changeGenreIds.add(10765L);
-        changeGenreIds.add(10766L);
-        changeGenreIds.add(10767L);
-        changeGenreIds.add(10768L);
-
-        oaProgramDetailsDto.getTmDbGenreInfos().stream().forEach(g -> {
-            if (changeGenreIds.contains(g.getId())) {
-                g.changeName(genreRepository.findByTmDbGenreId(g.getId())
-                    .orElseThrow(() -> new NotFoundException(ErrorCode.PROGRAM_GENRE_NOT_FOUND))
-                    .getName());
-            }
-        });
-
-        //장르 이름을 DTO에 반환하기 위해 추출!
-        List<String> genreName = new ArrayList<>();
-
-        oaProgramDetailsDto.getTmDbGenreInfos().stream().forEach(g -> {
-            genreName.add(g.getName());
-        });
-
-        // originalCountryName 추출 :영어 밖에 안됨 ㅠ
-        String originalCountryName = (oaProgramDetailsDto.getProductionCountries() == null
-            || oaProgramDetailsDto.getProductionCountries().isEmpty())
-            ? null : oaProgramDetailsDto.getProductionCountries().get(0).getName();
-
-        //programDetails 가 Movie 일 경우
-        if (oaProgramDetailsDto instanceof OAMovieDetailsDto) {
-            OAMovieDetailsDto oaMovieDetailsDto = (OAMovieDetailsDto) oaProgramDetailsDto;
-
-            return ProgramDetailResponse.builder()
-                .createdDate(oaMovieDetailsDto.getReleaseDate())
-                .country(originalCountryName)
-                .originalTitle(oaMovieDetailsDto.getOriginalTitle())
-                .overview(oaMovieDetailsDto.getOverview())
-                .title(oaMovieDetailsDto.getTitle())
-                .posterPath(oaMovieDetailsDto.getPoster_path())
+        ProgramDetailResponse programDetailResponse = ProgramDetailResponse.builder()
+                .backDropPath(program.getBackDropPath())
+                .tagline(program.getTagLine())
+                .posterPath(program.getPosterPath())
+                .title(program.getTitle())
                 .genreName(genreName)
-                .tagline(oaMovieDetailsDto.getTagline())
-                .backDropPath(oaMovieDetailsDto.getBackdrop_path())
+                .createdDate(program.getCreatedDate())
+                .overview(program.getOverView())
+                .originalTitle(program.getOriginalTitle())
+                .country(program.getOriginalCountry())
                 .build();
-        }
-        //programDetails 가 TV 일 경우
-        else {
-            OATvDetailsDto oaTvDetailsDto = (OATvDetailsDto) oaProgramDetailsDto;
 
-            return ProgramDetailResponse.builder()
-                .createdDate(oaTvDetailsDto.getFirstAirDate())
-                .country(originalCountryName)
-                .originalTitle(oaTvDetailsDto.getOriginalName())
-                .overview(oaTvDetailsDto.getOverview())
-                .title(oaTvDetailsDto.getName())
-                .posterPath(oaTvDetailsDto.getPoster_path())
-                .genreName(genreName)
-                .tagline(oaProgramDetailsDto.getTagline())
-                .backDropPath(oaProgramDetailsDto.getBackdrop_path())
-                .build();
-        }
+        return programDetailResponse;
+
     }
 
 
     //프로그램의 배우 가져오기
     private Mono<OAProgramCreditsDto> getCreditsDtoMono(Long tmDbProgramId,
-        ProgramType programType) {
+            ProgramType programType) {
         RequestHeadersUriSpec<?> requestHeadersUriSpec = webClient.get();
 
         if (programType == ProgramType.Movie) {
@@ -201,8 +137,8 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
         }
 
         return requestHeadersUriSpec
-            .retrieve()
-            .bodyToMono(OAProgramCreditsDto.class);
+                .retrieve()
+                .bodyToMono(OAProgramCreditsDto.class);
 
     }
 
@@ -213,8 +149,8 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
 
         //Acting 또는 Directing인 경우만 가져오도록 합니다.
         List<Cast> castsDirectingAndActing = oaProgramCreditsDto.getCast().stream()
-            .filter(cast -> changeCastName.containsKey(cast.getKnownForDepartment()))
-            .collect(Collectors.toList());
+                .filter(cast -> changeCastName.containsKey(cast.getKnownForDepartment()))
+                .collect(Collectors.toList());
 
         //Acting 과 Directing 을 배우와 감독으로 한국이름으로 바꿉니다.
         castsDirectingAndActing.stream().forEach(cast -> {
@@ -247,7 +183,7 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
         changeCrewName.put("Directing", "감독");
 
         List<Cast> crewDirecting = oaProgramCreditsDto.getCrew().stream().filter(cast ->
-            changeCrewName.containsKey(cast.getKnownForDepartment())
+                changeCrewName.containsKey(cast.getKnownForDepartment())
         ).collect(Collectors.toList());
 
         crewDirecting.stream().forEach(cast -> {
@@ -262,7 +198,7 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
     //프로그램의 Provider 가지고 오기
 
     private Mono<OAProgramProviderDto> getProviderDtoMono(Long tmDbProgramId,
-        ProgramType programType) {
+            ProgramType programType) {
 
         RequestHeadersUriSpec<?> requestHeadersUriSpec = webClient.get();
         if (programType == ProgramType.Movie) {
@@ -270,14 +206,17 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
         } else {
             requestHeadersUriSpec.uri("/tv/" + tmDbProgramId + "/watch/providers");
         }
+
         return requestHeadersUriSpec
-            .retrieve()
-            .bodyToMono(OAProgramProviderDto.class);
+                .retrieve()
+                .bodyToMono(OAProgramProviderDto.class);
 
     }
 
+    //ott 값을 한글 이름으로 변환
+
     private ProgramProviderListResponseDto changeOTTtoKoreanAndMakeProviderResponseDto(
-        OACountryDetailsDto oaCountryDetailsDto) {
+            OACountryDetailsDto oaCountryDetailsDto) {
 
         List<ProgramProviderResponseDto> buy = new ArrayList<>();
         List<ProgramProviderResponseDto> rent = new ArrayList<>();
@@ -285,45 +224,45 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
 
         Optional.ofNullable(oaCountryDetailsDto.getBuy()).ifPresent(oaProviderDetailsDtos -> {
             oaProviderDetailsDtos.stream().filter(oaProviderDetailsDto ->
-                ottRepository.existsByTmDbProviderId(oaProviderDetailsDto.getProvider_id())
+                    ottRepository.existsByTmDbProviderId(oaProviderDetailsDto.getProvider_id())
             ).forEach(oaProviderDetailsDto -> {
                 Optional<Ott> ott = ottRepository.findByTmDbProviderId(
-                    oaProviderDetailsDto.getProvider_id());
+                        oaProviderDetailsDto.getProvider_id());
                 buy.add(new ProgramProviderResponseDto(oaProviderDetailsDto.getLogo_path(),
-                    ott.orElse(null).getName()));
+                        ott.orElse(null).getName()));
             });
         });
 
         Optional.ofNullable(oaCountryDetailsDto.getRent()).ifPresent(oaProviderDetailsDtos -> {
             oaProviderDetailsDtos.stream().filter(oaProviderDetailsDto ->
-                ottRepository.existsByTmDbProviderId(oaProviderDetailsDto.getProvider_id())
+                    ottRepository.existsByTmDbProviderId(oaProviderDetailsDto.getProvider_id())
             ).forEach(oaProviderDetailsDto -> {
                 Optional<Ott> ott = ottRepository.findByTmDbProviderId(
-                    oaProviderDetailsDto.getProvider_id());
+                        oaProviderDetailsDto.getProvider_id());
                 rent.add(new ProgramProviderResponseDto(oaProviderDetailsDto.getLogo_path(),
-                    ott.orElse(null).getName()));
+                        ott.orElse(null).getName()));
             });
         });
 
         Optional.ofNullable(oaCountryDetailsDto.getFlatrate()).ifPresent(oaProviderDetailsDtos -> {
             oaProviderDetailsDtos.stream().filter(oaProviderDetailsDto ->
-                ottRepository.existsByTmDbProviderId(oaProviderDetailsDto.getProvider_id())
+                    ottRepository.existsByTmDbProviderId(oaProviderDetailsDto.getProvider_id())
             ).forEach(oaProviderDetailsDto -> {
                 Optional<Ott> ott = ottRepository.findByTmDbProviderId(
-                    oaProviderDetailsDto.getProvider_id());
+                        oaProviderDetailsDto.getProvider_id());
                 streaming.add(new ProgramProviderResponseDto(oaProviderDetailsDto.getLogo_path(),
-                    ott.orElse(null).getName()));
+                        ott.orElse(null).getName()));
             });
         });
 
         return ProgramProviderListResponseDto.builder()
-            .buy(buy)
-            .rent(rent)
-            .streaming(streaming)
-            .buySize(buy.size())
-            .rentSize(rent.size())
-            .streamingSize(streaming.size())
-            .build();
+                .buy(buy)
+                .rent(rent)
+                .streaming(streaming)
+                .buySize(buy.size())
+                .rentSize(rent.size())
+                .streamingSize(streaming.size())
+                .build();
 
     }
 
@@ -333,19 +272,20 @@ public class ProgramDetailsShowServiceImpl implements ProgramDetailsShowService 
     public UserSpecificRatingResponseDto showUserSpecificRating(User user, Long programId) {
 
         Genre usersFirstGenre = userGenreRepository.find1stGenreByUserIdFetchJoin(user.getId())
-            .orElseThrow(() -> new NotFoundException(ErrorCode.USER_FIRST_GENRE_NOT_FOUND))
-            .getGenre();
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_FIRST_GENRE_NOT_FOUND))
+                .getGenre();
 
         int userSpecificGenreCount = reviewRepository.countByGenreName(usersFirstGenre.getName(),
-            programId);
+                programId);
 
         Double sumRating = reviewRepository.sumReviewRatingByGenreName(usersFirstGenre.getName(),
-            programId);
+                programId);
 
         double userSpecificReviewRatingSum = (sumRating != null) ? sumRating : 0.0;
 
         double avg =
-            userSpecificGenreCount == 0 ? 0 : userSpecificReviewRatingSum / userSpecificGenreCount;
+                userSpecificGenreCount == 0 ? 0
+                        : userSpecificReviewRatingSum / userSpecificGenreCount;
 
         return new UserSpecificRatingResponseDto(usersFirstGenre.getName(), avg);
     }
