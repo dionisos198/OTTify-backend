@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tavebalak.OTTify.common.lock.DistributeLock;
 import tavebalak.OTTify.error.ErrorCode;
@@ -39,6 +38,7 @@ public class ReviewCUDServiceImpl implements ReviewCUDService {
     //리뷰 저장
     @Override
     @Transactional
+    @DistributeLock(key = "T(java.lang.String).format('program%d', #reviewSaveDto.programId)")
     public void saveReview(User user, ReviewSaveDto reviewSaveDto) {
 
         Program program = programRepository.findWithPessimisticWriteById(
@@ -80,7 +80,8 @@ public class ReviewCUDServiceImpl implements ReviewCUDService {
 
     //리뷰 수정
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
+    @DistributeLock(key = "T(java.lang.String).format('program%d', #reviewSaveDto.programId)")
     public void updateReview(User user, Long reviewId, ReviewUpdateDto reviewUpdateDto) {
 
         Review review = reviewRepository.findById(reviewId)
@@ -141,6 +142,7 @@ public class ReviewCUDServiceImpl implements ReviewCUDService {
     //리뷰 삭제
     @Override
     @Transactional
+    @DistributeLock(key = "T(java.lang.String).format('program%d', #reviewSaveDto.programId)")
     public void deleteReview(User user, Long reviewId) {
 
         Review review = reviewRepository.findById(reviewId)
