@@ -17,7 +17,7 @@ public interface ReviewShowProgramDetailService {
     FourReviewResponseWithCounts show4UserSpecificReviewList(User user, Long programId);
 
     ReviewListWithSliceInfoDto showUserSpecificReviewList(User user, Long programId,
-        Pageable pageable);
+            Pageable pageable);
 
 
 }
