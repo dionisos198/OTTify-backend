@@ -42,16 +42,36 @@ public class Program {
 
     private String createdYear;
 
+    private String createdDate;
+    private String originalCountry;
+    private String originalTitle;
+    @Column(length = 3000)
+    private String overView;
+    private String tagLine;
+    private String backDropPath;
+    private boolean willDeleted;
+
+
     @Builder
-    public Program(String title, String posterPath, Long tmDbProgramId, ProgramType type,
-        String createdYear) {
+    public Program(String title, String posterPath, Long tmDbProgramId,
+            ProgramType type, String createdYear, String createdDate, String originalCountry,
+            String originalTitle,
+            String overView, String tagLine, String backDropPath) {
+
         this.title = title;
         this.posterPath = posterPath;
+        this.averageRating = 0;
+        this.reviewCount = 0;
         this.tmDbProgramId = tmDbProgramId;
         this.type = type;
         this.createdYear = createdYear;
-        this.averageRating = 0;
-        this.reviewCount = 0;
+        this.createdDate = createdDate;
+        this.originalCountry = originalCountry;
+        this.originalTitle = originalTitle;
+        this.overView = overView;
+        this.tagLine = tagLine;
+        this.backDropPath = backDropPath;
+        this.willDeleted = false;
     }
 
 
@@ -104,7 +124,7 @@ public class Program {
 
     //리뷰 점수 업데이트시 평점 변화
     public void changeProgramReviewRatingAndRecalculatingAverage(double beforeRating,
-        double afterRating) {
+            double afterRating) {
         double beforeRatingSum = averageRating * reviewCount;
         double afterRatingSum = beforeRatingSum - beforeRating + afterRating;
         averageRating = afterRatingSum / reviewCount;
